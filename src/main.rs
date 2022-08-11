@@ -10,7 +10,7 @@ struct Schleusenwerte {
     kammerlaenge: f64,
 }
 
-struct fuell_rechteck {
+struct FuellRechteck {
     oeffnungsgeschwindigkeit: f64, // in m/s
     breite: f64,
     hoehe: f64,
@@ -24,7 +24,7 @@ trait Fuellquerschnitt {
     fn is_fully_opened(&self, zeit: f64) -> bool;
 }
 
-impl Fuellquerschnitt for fuell_rechteck {
+impl Fuellquerschnitt for FuellRechteck {
     fn querschnitt(&self, zeit: f64) -> f64 {
         let temp = zeit * self.oeffnungsgeschwindigkeit;
         return if temp > self.hoehe {
@@ -100,7 +100,7 @@ fn main() {
     let y = schleuse.hubhoehe();
     println!("y = {}", y);
 
-    let qs = fuell_rechteck {
+    let qs = FuellRechteck {
         oeffnungsgeschwindigkeit: 0.005,
         breite: 0.85,
         hoehe: 0.9,
