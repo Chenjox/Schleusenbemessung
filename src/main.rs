@@ -45,7 +45,7 @@ impl Schleusenwerte {
     }
 
     fn wasserspiegel_unterwasser(&self) -> f64 {
-        self.oberwasser - self.unterwassersohle
+        self.unterwasser - self.unterwassersohle
     }
 
     fn hubhoehe(&self) -> f64 {
@@ -91,6 +91,46 @@ fn read_schleusenwerte(file_name: &str) -> Result<Schleusenwerte, toml::de::Erro
     return contents;
 }
 
+fn fuell_schleuse(schl: &Schleusenwerte, quer: &impl Fuellquerschnitt) {
+    let mut kammerspiegel: f64 = schl.wasserspiegel_unterwasser();
+    let kammerspiegel_max = schl.hubhoehe() + schl.wasserspiegel_unterwasser();
+    let mut hydraulische_hoehe: f64 = schl.hubhoehe();
+
+    let leistungsbeiwert: f64 = 0.55;
+    let verlustbeiwert: f64 = 0.8;
+    let mut durchfluss: f64 = 0.0;
+
+    let zeitschritt = 10.0;
+    let mut i = 1;
+    let mut volume = schl.grundflaeche() * kammerspiegel;
+    let max_iterations = 100;
+
+    while kammerspiegel < kammerspiegel_max && i < max_iterations {
+        kammerspiegel = volume / schl.grundflaeche();
+        // Der momentane Durchfluss
+        durchfluss =
+            (2.0 * 9.81 * (schl.hubhoehe() - kammerspiegel + schl.wasserspiegel_unterwasser())
+                / (1.0 + verlustbeiwert))
+                .sqrt()
+                * leistungsbeiwert
+                * quer.querschnitt(zeitschritt * (i as f64));
+        durchfluss = if durchfluss.is_nan() { 0.0 } else { durchfluss };
+        // Ergo der Zuwachs an Volumen ist
+        volume += durchfluss * zeitschritt;
+
+        println!(
+            "Q = {} m^3/s, t = {} s, K = {} m, V = {} m^3",
+            durchfluss,
+            zeitschritt * f64::from(i),
+            kammerspiegel,
+            volume
+        );
+        // Und die neue hoehe ist...
+
+        i += 1;
+    }
+}
+
 fn main() {
     let schleuse = match read_schleusenwerte("test.toml") {
         Ok(s) => s,
@@ -102,11 +142,9 @@ fn main() {
 
     let qs = FuellRechteck {
         oeffnungsgeschwindigkeit: 0.005,
-        breite: 0.85,
-        hoehe: 0.9,
+        breite: 5.85,
+        hoehe: 3.0,
     };
 
-    for i in 0..300 {
-        println!("{:?}", qs.querschnitt(f64::from(i)));
-    }
+    fuell_schleuse(&schleuse, &qs);
 }
