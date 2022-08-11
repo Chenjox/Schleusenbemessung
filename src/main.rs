@@ -10,6 +10,35 @@ struct Schleusenwerte {
     kammerlaenge: f64,
 }
 
+struct fuell_rechteck {
+    oeffnungsgeschwindigkeit: f64, // in m/s
+    breite: f64,
+    hoehe: f64,
+}
+
+trait Fuellquerschnitt {
+    // Fläche des geöffneten Querschnitts zu einem Zeitpunkt s
+    fn querschnitt(&self, zeit: f64) -> f64;
+
+    // Ob der Fülllquerschnitt vollständig geöffnet ist..
+    fn is_fully_opened(&self, zeit: f64) -> bool;
+}
+
+impl Fuellquerschnitt for fuell_rechteck {
+    fn querschnitt(&self, zeit: f64) -> f64 {
+        let temp = zeit * self.oeffnungsgeschwindigkeit;
+        return if temp > self.hoehe {
+            self.breite * self.hoehe
+        } else {
+            self.breite * temp
+        };
+    }
+
+    fn is_fully_opened(&self, zeit: f64) -> bool {
+        return zeit * self.oeffnungsgeschwindigkeit > self.hoehe;
+    }
+}
+
 impl Schleusenwerte {
     fn wasserspiegel_oberwasser(&self) -> f64 {
         self.oberwasser - self.oberwassersohle
@@ -70,4 +99,14 @@ fn main() {
 
     let y = schleuse.hubhoehe();
     println!("y = {}", y);
+
+    let qs = fuell_rechteck {
+        oeffnungsgeschwindigkeit: 0.005,
+        breite: 0.85,
+        hoehe: 0.9,
+    };
+
+    for i in 0..300 {
+        println!("{:?}", qs.querschnitt(f64::from(i)));
+    }
 }
