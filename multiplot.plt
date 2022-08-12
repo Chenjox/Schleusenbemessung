@@ -39,7 +39,7 @@ s = STATS_max
 
 set yrange [0:s+0.1*s]
 set ytics 0.01 offset -16, 0
-set ylabel 'Wasserspiegelneigung in [-]' offset -16, 0
+set ylabel 'Wasserspiegelneigung in [mm/m]' offset -16, 0
 plot 'result.csv' using 1:5 with lines linecolor 3 notitle
 
 #plot 'result.csv' using 1:2 with lines axes x1y1 title 'Durchfluss in [m^3/s]', \

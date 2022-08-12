@@ -170,6 +170,7 @@ impl Schleuse {
         let max_iterations = 2000;
 
         let mut result_vec = Vec::new();
+        let mut durchfluss = 0.0;
 
         while kammerspiegel < self.oberhaupt.oberwasser - self.unterhaupt.unterwassersohle
             && i < max_iterations
@@ -179,15 +180,21 @@ impl Schleuse {
                 - (self.oberhaupt.oberwassersohle - self.unterhaupt.unterwassersohle))
                 .max(0.0);
             let oberehoehe = self.oberhaupt.wasserspiegel();
-            let durchfluss =
-                self.fuellsystem
+            let durchfluss_alt = durchfluss;
+            durchfluss = 0.65
+                * self
+                    .fuellsystem
                     .durchfluss(unterehoehe, oberehoehe, zeitschritt * (i as f64));
             let durchfluss = if durchfluss.is_nan() { 0.0 } else { durchfluss };
             volume += durchfluss * zeitschritt;
 
-            let wellengeschwindigkeit = (self.unterhaupt.wasserspiegel() * G).sqrt();
-            let wasserspiegelneigung = durchfluss * zeitschritt
-                / (self.kammer.breite * wellengeschwindigkeit * wellengeschwindigkeit);
+            let wellengeschwindigkeit = (kammerspiegel * G).sqrt();
+            let wasserspiegelneigung = (durchfluss - durchfluss_alt)
+                / (zeitschritt
+                    * self.kammer.breite
+                    * wellengeschwindigkeit
+                    * wellengeschwindigkeit)
+                * 10.0e3;
 
             result_vec.push([
                 zeitschritt * f64::from(i),

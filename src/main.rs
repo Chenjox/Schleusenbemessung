@@ -73,18 +73,18 @@ fn main() {
     let fuell1 = Fuellquerschnittssystem {
         hoehe: 0.3,
         fuellquerschnitt: Box::new(FuellRechteck {
-            oeffnungsgeschwindigkeit: 0.0009,
-            breite: 2.353,
-            hoehe: 1.4,
+            oeffnungsgeschwindigkeit: 0.0003,
+            breite: 4.0,
+            hoehe: 3.0,
         }),
     };
 
     let fuell2 = Fuellquerschnittssystem {
         hoehe: 0.3,
         fuellquerschnitt: Box::new(FuellRechteck {
-            oeffnungsgeschwindigkeit: 0.0009,
-            breite: 2.353,
-            hoehe: 1.4,
+            oeffnungsgeschwindigkeit: 0.0003,
+            breite: 4.0,
+            hoehe: 3.0,
         }),
     };
 
