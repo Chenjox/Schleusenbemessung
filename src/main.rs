@@ -1,27 +1,16 @@
-use serde::Deserialize;
-use std::fs;
+mod hydraulic;
 
-struct Schleusenwerte {
-    oberwasser: f64,
-    oberwassersohle: f64,
-    unterwasser: f64,
-    unterwassersohle: f64,
-    kammerbreite: f64,
-    kammerlaenge: f64,
-}
+use serde::Deserialize;
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::Path;
+
+use crate::hydraulic::*;
 
 struct FuellRechteck {
     oeffnungsgeschwindigkeit: f64, // in m/s
     breite: f64,
     hoehe: f64,
-}
-
-trait Fuellquerschnitt {
-    // Fläche des geöffneten Querschnitts zu einem Zeitpunkt s
-    fn querschnitt(&self, zeit: f64) -> f64;
-
-    // Ob der Fülllquerschnitt vollständig geöffnet ist..
-    fn is_fully_opened(&self, zeit: f64) -> bool;
 }
 
 impl Fuellquerschnitt for FuellRechteck {
@@ -34,35 +23,21 @@ impl Fuellquerschnitt for FuellRechteck {
         };
     }
 
+    fn freigegebene_hoehe(&self, zeit: f64) -> f64 {
+        return (zeit * self.oeffnungsgeschwindigkeit).min(self.hoehe);
+    }
+
+    fn freigegebene_breite(&self, _hoehe: f64) -> f64 {
+        return self.breite;
+    }
+
     fn is_fully_opened(&self, zeit: f64) -> bool {
         return zeit * self.oeffnungsgeschwindigkeit > self.hoehe;
     }
 }
 
-impl Schleusenwerte {
-    fn wasserspiegel_oberwasser(&self) -> f64 {
-        self.oberwasser - self.oberwassersohle
-    }
-
-    fn wasserspiegel_unterwasser(&self) -> f64 {
-        self.unterwasser - self.unterwassersohle
-    }
-
-    fn hubhoehe(&self) -> f64 {
-        self.oberwasser - self.unterwasser
-    }
-
-    fn grundflaeche(&self) -> f64 {
-        self.kammerbreite * self.kammerlaenge
-    }
-
-    fn wasservolumen(&self) -> f64 {
-        self.kammerbreite * self.kammerlaenge * (self.hubhoehe() + self.unterwassersohle)
-    }
-}
-
 #[derive(Deserialize)]
-struct Schleuse {
+struct Schleusenwerte {
     unterwasser: f64,
     unterwassersohle: f64,
     oberwasser: f64,
@@ -71,64 +46,22 @@ struct Schleuse {
     kammerlaenge: f64,
 }
 
-impl From<Schleuse> for Schleusenwerte {
-    fn from(s: Schleuse) -> Self {
-        Schleusenwerte {
-            oberwasser: s.oberwasser,
-            oberwassersohle: s.oberwassersohle,
-            unterwasser: s.unterwasser,
-            unterwassersohle: s.unterwassersohle,
-            kammerbreite: s.kammerbreite,
-            kammerlaenge: s.kammerlaenge,
-        }
-    }
-}
-
 fn read_schleusenwerte(file_name: &str) -> Result<Schleusenwerte, toml::de::Error> {
-    let contents = fs::read_to_string(file_name).unwrap();
-    let contents: Result<Schleuse, _> = toml::from_str(&contents);
-    let contents: Result<Schleusenwerte, _> = contents.map(|v| Schleusenwerte::from(v));
+    // Ein wenig File IO
+    let path = Path::new(file_name);
+    let mut file = match File::open(&path) {
+        Err(why) => panic!("Couldn't open {}: {}", file_name, why),
+        Ok(file) => file,
+    };
+    // Beim Lesen kann auch viel schief gehen
+    let mut s = String::new();
+    match file.read_to_string(&mut s) {
+        Err(why) => panic!("couldn't read {}: {}", file_name, why),
+        Ok(_) => {}
+    };
+    // Und beim Parsen erst...
+    let contents: Result<Schleusenwerte, _> = toml::from_str(&s);
     return contents;
-}
-
-fn fuell_schleuse(schl: &Schleusenwerte, quer: &impl Fuellquerschnitt) {
-    let mut kammerspiegel: f64 = schl.wasserspiegel_unterwasser();
-    let kammerspiegel_max = schl.hubhoehe() + schl.wasserspiegel_unterwasser();
-    let mut hydraulische_hoehe: f64 = schl.hubhoehe();
-
-    let leistungsbeiwert: f64 = 0.55;
-    let verlustbeiwert: f64 = 0.8;
-    let mut durchfluss: f64 = 0.0;
-
-    let zeitschritt = 10.0;
-    let mut i = 1;
-    let mut volume = schl.grundflaeche() * kammerspiegel;
-    let max_iterations = 100;
-
-    while kammerspiegel < kammerspiegel_max && i < max_iterations {
-        kammerspiegel = volume / schl.grundflaeche();
-        // Der momentane Durchfluss
-        durchfluss =
-            (2.0 * 9.81 * (schl.hubhoehe() - kammerspiegel + schl.wasserspiegel_unterwasser())
-                / (1.0 + verlustbeiwert))
-                .sqrt()
-                * leistungsbeiwert
-                * quer.querschnitt(zeitschritt * (i as f64));
-        durchfluss = if durchfluss.is_nan() { 0.0 } else { durchfluss };
-        // Ergo der Zuwachs an Volumen ist
-        volume += durchfluss * zeitschritt;
-
-        println!(
-            "Q = {} m^3/s, t = {} s, K = {} m, V = {} m^3",
-            durchfluss,
-            zeitschritt * f64::from(i),
-            kammerspiegel,
-            volume
-        );
-        // Und die neue hoehe ist...
-
-        i += 1;
-    }
 }
 
 fn main() {
@@ -137,14 +70,57 @@ fn main() {
         Err(s) => panic!("{:?}", s),
     };
 
-    let y = schleuse.hubhoehe();
-    println!("y = {}", y);
-
-    let qs = FuellRechteck {
-        oeffnungsgeschwindigkeit: 0.005,
-        breite: 5.85,
-        hoehe: 3.0,
+    let fuell1 = Fuellquerschnittssystem {
+        hoehe: 0.3,
+        fuellquerschnitt: Box::new(FuellRechteck {
+            oeffnungsgeschwindigkeit: 0.0009,
+            breite: 2.353,
+            hoehe: 1.4,
+        }),
     };
 
-    fuell_schleuse(&schleuse, &qs);
+    let fuell2 = Fuellquerschnittssystem {
+        hoehe: 0.3,
+        fuellquerschnitt: Box::new(FuellRechteck {
+            oeffnungsgeschwindigkeit: 0.0009,
+            breite: 2.353,
+            hoehe: 1.4,
+        }),
+    };
+
+    let schleuse = Schleuse {
+        kammer: Schleusenkammer {
+            breite: schleuse.kammerbreite,
+            laenge: schleuse.kammerlaenge,
+        },
+        oberhaupt: Oberhaupt {
+            oberwasser: schleuse.oberwasser,
+            oberwassersohle: schleuse.oberwassersohle,
+        },
+        unterhaupt: Unterhaupt {
+            unterwasser: schleuse.unterwasser,
+            unterwassersohle: schleuse.unterwassersohle,
+        },
+        fuellsystem: Fuellsystem {
+            querschnitte: vec![Box::new(fuell1), Box::new(fuell2)],
+        },
+    };
+
+    let v = schleuse.fuell_schleuse();
+    let v = v
+        .iter()
+        .map(|i| i.map(|e| e.to_string()).join(","))
+        .collect::<Vec<String>>()
+        .join("\n");
+
+    let path = Path::new("result.csv");
+    let mut file = match File::create(&path) {
+        Err(why) => panic!("Couldn't create result.csv: {}", why),
+        Ok(file) => file,
+    };
+    match file.write_all(v.as_bytes()) {
+        Err(why) => panic!("couldn't write to result.csv: {}", why),
+        Ok(_) => println!("successfully wrote to result.csv"),
+    }
+    //println!("{}", v)
 }
