@@ -162,7 +162,7 @@ impl Schleuse {
         self.kammer.grundflaeche() * (self.hubhoehe() + self.unterhaupt.wasserspiegel())
     }
 
-    pub fn fuell_schleuse(&self) -> Vec<[f64; 5]> {
+    pub fn fuell_schleuse(&self) -> Vec<[f64; 6]> {
         let mut kammerspiegel = self.unterhaupt.wasserspiegel();
         let zeitschritt = 1.0;
         let mut i = 1;
@@ -202,6 +202,7 @@ impl Schleuse {
                 kammerspiegel,
                 volume,
                 wasserspiegelneigung,
+                (durchfluss - durchfluss_alt) / zeitschritt,
             ]);
 
             i += 1;
