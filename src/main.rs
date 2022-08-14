@@ -7,7 +7,7 @@ use std::io::prelude::*;
 use std::path::Path;
 
 use log::LevelFilter;
-use log::{info, warn};
+use log::{error, info, warn};
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
@@ -51,38 +51,26 @@ fn setup_logger() -> Result<(), ()> {
         .unwrap();
     let config = Config::builder()
         .appender(Appender::builder().build("logfile", Box::new(logfile)))
-        .build(
-            Root::builder()
-                .appender("logfile")
-                .build(LevelFilter::Trace),
-        )
+        .build(Root::builder().appender("logfile").build(LevelFilter::Info))
         .unwrap();
     log4rs::init_config(config).unwrap();
 
     return Ok(());
 }
 
-struct K(f64, String);
-
-fn main() {
-    match setup_logger() {
-        Ok(_) => {}
-        Err(_) => panic!("Logging doens't work"),
-    };
-    info!("Set up logger");
-    info!("Reading File 'test.toml'");
-    let schleuse = match read_schleusenwerte("test.toml") {
-        Ok(s) => s,
-        Err(s) => panic!("{:?}", s),
-    };
-
+fn erschaffe_schleuse(
+    schleuse: &Schleusenwerte,
+    hoehe: f64,
+    breite: f64,
+    fuellzeit: f64,
+) -> Schleuse {
     let fuell1 = Fuellquerschnittssystem {
         hoehe: 0.04,
         startzeit: 0.0,
         fuellquerschnitt: Box::new(FuellRechteck {
-            oeffnungsgeschwindigkeit: 0.0015,
-            breite: 2.0,
-            hoehe: 1.250,
+            oeffnungsgeschwindigkeit: fuellzeit,
+            breite: breite,
+            hoehe: hoehe,
         }),
     };
 
@@ -90,9 +78,9 @@ fn main() {
         hoehe: 0.04,
         startzeit: 0.0,
         fuellquerschnitt: Box::new(FuellRechteck {
-            oeffnungsgeschwindigkeit: 0.0015,
-            breite: 2.0,
-            hoehe: 1.250,
+            oeffnungsgeschwindigkeit: fuellzeit,
+            breite: breite,
+            hoehe: hoehe,
         }),
     };
 
@@ -100,9 +88,9 @@ fn main() {
         hoehe: 0.04,
         startzeit: 0.0,
         fuellquerschnitt: Box::new(FuellRechteck {
-            oeffnungsgeschwindigkeit: 0.0015,
-            breite: 2.0,
-            hoehe: 1.250,
+            oeffnungsgeschwindigkeit: fuellzeit,
+            breite: breite,
+            hoehe: hoehe,
         }),
     };
 
@@ -110,13 +98,13 @@ fn main() {
         hoehe: 0.04,
         startzeit: 0.0,
         fuellquerschnitt: Box::new(FuellRechteck {
-            oeffnungsgeschwindigkeit: 0.0015,
-            breite: 2.0,
-            hoehe: 1.250,
+            oeffnungsgeschwindigkeit: fuellzeit,
+            breite: breite,
+            hoehe: hoehe,
         }),
     };
 
-    let schleuse = Schleuse {
+    let schleusen = Schleuse {
         kammer: Schleusenkammer {
             breite: schleuse.kammerbreite,
             laenge: schleuse.kammerlaenge,
@@ -140,8 +128,22 @@ fn main() {
             ],
         },
     };
-    info!("Running Simulation");
-    let v = schleuse.fuell_schleuse();
+    //info!("Running Simulation");
+    //let result = schleuse.fuell_schleuse();
+    //let result = result.last().unwrap().zeitschritt;
+
+    return schleusen;
+}
+
+fn rechne_schleuse(schl: &Schleuse) -> f64 {
+    let result = schl.fuell_schleuse();
+    let result = result.last().unwrap().zeitschritt;
+    return result;
+}
+
+fn simuliere_schleuse(schl: &Schleuse) {
+    info!("Durchrechnen der Schleuse");
+    let v = schl.fuell_schleuse();
     let mut events = Vec::new();
     for k in &v {
         if !k.events.is_empty() {
@@ -151,6 +153,7 @@ fn main() {
             }
         }
     }
+    info!("Auswerten der Ergebnisse");
     let v = v
         .iter()
         .map(|i| {
@@ -178,7 +181,7 @@ fn main() {
     };
     match file.write_all(events.as_bytes()) {
         Err(why) => panic!("couldn't write to result.csv: {}", why),
-        Ok(_) => println!("successfully wrote to result.csv"),
+        Ok(_) => info!("successfully wrote to events.csv"),
     }
     let path = Path::new("result.csv");
     let mut file = match File::create(&path) {
@@ -187,7 +190,61 @@ fn main() {
     };
     match file.write_all(v.as_bytes()) {
         Err(why) => panic!("couldn't write to result.csv: {}", why),
-        Ok(_) => println!("successfully wrote to result.csv"),
+        Ok(_) => info!("successfully wrote to result.csv"),
     }
+}
+
+struct K(f64, String);
+
+fn main() {
+    match setup_logger() {
+        Ok(_) => {}
+        Err(_) => panic!("Logging doens't work"),
+    };
+    info!("Set up logger");
+    info!("Reading File 'test.toml'");
+    let schleuse = match read_schleusenwerte("test.toml") {
+        Ok(s) => s,
+        Err(s) => panic!("{:?}", s),
+    };
+    // Variieren der einzelnen Werte
+
+    let var_geschwindigkeit = (0.00045, 0.0019);
+    let var_hoehe = (1.0, 1.25);
+    let var_breite = (1.0, 2.0);
+
+    for v in (0..100).step_by(10) {
+        let geschwi = var_geschwindigkeit.0
+            + (var_geschwindigkeit.1 - var_geschwindigkeit.0) * v as f64 / 100.0;
+        let mut results: Vec<[f64; 3]> = Vec::new();
+        for i in (0..100).step_by(2) {
+            let hoehe = var_hoehe.0 + (var_hoehe.1 - var_hoehe.0) * i as f64 / 100.0;
+            for j in (0..100).step_by(2) {
+                let breite = var_breite.0 + (var_breite.1 - var_breite.0) * j as f64 / 100.0;
+                let schleus = erschaffe_schleuse(&schleuse, hoehe, breite, geschwi);
+                let r = rechne_schleuse(&schleus);
+                results.push([hoehe, breite, r]);
+            }
+        }
+        let r = results
+            .iter()
+            .map(|f| format!("{},{},{}", f[0], f[1], f[2]))
+            .collect::<Vec<String>>()
+            .join("\n");
+        let nam = format!("dimen{:03}.csv", v);
+        let path = Path::new(&nam);
+        let mut file = match File::create(&path) {
+            Err(why) => {
+                error!("Couldn't create dimen{:03}.csv: {}", nam, why);
+                return;
+            }
+            Ok(file) => file,
+        };
+        match file.write_all(r.as_bytes()) {
+            Err(why) => error!("couldn't write to dimen{}.csv: {}", nam, why),
+            Ok(_) => info!("successfully wrote to dimen{}.csv", nam),
+        }
+    }
+
     //println!("{}", v)
 }

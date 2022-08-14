@@ -30,7 +30,7 @@ set ytics offset -8, 0
 set ylabel 'Durchfluss in [m^3/s]' offset -8, 0
 plot 'result.csv' using 2:4 with lines linecolor 2 notitle
 
-set arrow from qpos, graph(0,0) to qpos, graph(1,1) nohead
+#set arrow from qpos, graph(0,0) to qpos, graph(1,1) nohead
 
 #### Plot 3
 
@@ -50,9 +50,10 @@ plot 'result.csv' using 1:5 with lines linecolor 3 notitle
 
 unset xtics
 
-set yrange [0:q+5]
 unset ytics
 unset ylabel
-plot 'events.csv' using 1:($1*0.0+q) with impulses linecolor 4 notitle
+unset border
+set yrange [0:q+5]
+plot 'events.csv' using 1:($1*0.0+q+5) with impulses linecolor 4 notitle
 
 pause -1
