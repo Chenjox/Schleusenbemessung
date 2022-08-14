@@ -1,3 +1,5 @@
+use log::{debug, error, info, trace, warn};
+
 const G: f64 = 9.81;
 
 pub trait Fuellquerschnitt {
@@ -12,6 +14,13 @@ pub trait Fuellquerschnitt {
 
     // Ob der Fülllquerschnitt vollständig geöffnet ist..
     fn is_fully_opened(&self, zeit: f64) -> bool;
+
+    /**
+    Berechnet den Durchflussverlust in abhängigkeit von den jeweiligen Bedingungen.
+    */
+    fn durchflussverslust_ueberfall(&self, pot_hoehe: f64, unterehoehe: f64, zeit: f64) -> f64;
+    fn durchflussverslust_unterstroemung(&self, pot_hoehe: f64, unterehoehe: f64, zeit: f64)
+        -> f64;
 
     // Quadratur zur Ermittlung des Durchflusses
     // Die Potentialhoehe ist anzugeben auf die untere Kante des Füllquerschnitts
@@ -92,20 +101,39 @@ impl Fuellquerschnittssystem {
     */
     pub fn durchfluss(&self, oberehoehe: f64, unterehoehe: f64, zeit: f64) -> f64 {
         let pot_hoehe = oberehoehe - self.hoehe;
+        let ueberstroemhoehe = (unterehoehe - self.hoehe).max(0.0);
+        // Block für die Verluste
+        let mu_a = self
+            .fuellquerschnitt
+            .durchflussverslust_ueberfall(pot_hoehe, unterehoehe, zeit);
+        let mu_s =
+            self.fuellquerschnitt
+                .durchflussverslust_unterstroemung(pot_hoehe, unterehoehe, zeit);
 
         if unterehoehe < self.hoehe {
-            self.fuellquerschnitt
+            mu_a * self
+                .fuellquerschnitt
                 .quadratur_durchfluss_ueberfall(pot_hoehe, 0.0, zeit)
         } else {
-            self.fuellquerschnitt.quadratur_durchfluss_unterstroemung(
-                pot_hoehe,
-                unterehoehe - self.hoehe,
-                zeit,
-            ) + self.fuellquerschnitt.quadratur_durchfluss_ueberfall(
-                pot_hoehe,
-                unterehoehe - self.hoehe,
-                zeit,
-            )
+            let fuellhoehe = self
+                .fuellquerschnitt
+                .freigegebene_hoehe(zeit)
+                .min(ueberstroemhoehe);
+            let mu_as = (mu_a
+                * (self.fuellquerschnitt.freigegebene_hoehe(zeit) - fuellhoehe).max(0.0)
+                + (mu_s * fuellhoehe).max(0.0))
+                / self.fuellquerschnitt.freigegebene_hoehe(zeit);
+            trace!("mu_a = {:?}, mu_s = {:?}, mu_as = {:?}", mu_a, mu_s, mu_as);
+            mu_as
+                * (self.fuellquerschnitt.quadratur_durchfluss_unterstroemung(
+                    pot_hoehe,
+                    ueberstroemhoehe,
+                    zeit,
+                ) + self.fuellquerschnitt.quadratur_durchfluss_ueberfall(
+                    pot_hoehe,
+                    ueberstroemhoehe,
+                    zeit,
+                ))
         }
     }
 }
@@ -171,6 +199,10 @@ impl Schleuse {
 
         let mut result_vec = Vec::new();
         let mut durchfluss = 0.0;
+        debug!(
+            "The start values for iteration in fuell_schleuse are: HKA = {:?}, volume = {:?}",
+            kammerspiegel, volume
+        );
 
         while kammerspiegel < self.oberhaupt.oberwasser - self.unterhaupt.unterwassersohle
             && i < max_iterations

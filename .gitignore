@@ -1,2 +1,5 @@
 /target
 result.csv
+__**
+*.log
+log4rs.yml
