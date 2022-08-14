@@ -18,9 +18,20 @@ pub trait Fuellquerschnitt {
     /**
     Berechnet den Durchflussverlust in abhängigkeit von den jeweiligen Bedingungen.
     */
-    fn durchflussverslust_ueberfall(&self, pot_hoehe: f64, unterehoehe: f64, zeit: f64) -> f64;
-    fn durchflussverslust_unterstroemung(&self, pot_hoehe: f64, unterehoehe: f64, zeit: f64)
-        -> f64;
+    fn durchflussverslust_ueberfall(
+        &self,
+        schleuse: &Schleuse,
+        pot_hoehe: f64,
+        unterehoehe: f64,
+        zeit: f64,
+    ) -> f64;
+    fn durchflussverslust_unterstroemung(
+        &self,
+        schleuse: &Schleuse,
+        pot_hoehe: f64,
+        unterehoehe: f64,
+        zeit: f64,
+    ) -> f64;
 
     // Quadratur zur Ermittlung des Durchflusses
     // Die Potentialhoehe ist anzugeben auf die untere Kante des Füllquerschnitts
@@ -83,6 +94,7 @@ pub struct Schleusenkammer {
 
 pub struct Oberhaupt {
     pub oberwasser: f64,
+    pub oberwasserbreite: f64,
     pub oberwassersohle: f64,
 }
 
@@ -98,19 +110,33 @@ impl Fuellquerschnittssystem {
     Die obere hoehe gibt die Höhe des OWs bzw. des Kammerwassers an. (= Potential von dem Ausgegangen wird.)
     Die untere hoehe gibt die Höhe des Kammerwassers bzw des UWs an. (= Ob Querschnitt teilweise rückgestaut ist.)
     Beide Höhen sind ausgehend von der Bezugshöhe angegeben.
+    Weitere Konstruktive Maße sind der Schleuse zu entnehmen.
     */
-    pub fn durchfluss(&self, oberehoehe: f64, unterehoehe: f64, zeit: f64) -> f64 {
+    pub fn durchfluss(
+        &self,
+        schleuse: &Schleuse,
+        oberehoehe: f64,
+        unterehoehe: f64,
+        zeit: f64,
+    ) -> f64 {
         let pot_hoehe = oberehoehe - self.hoehe;
         let ueberstroemhoehe = (unterehoehe - self.hoehe).max(0.0);
         // Block für die Verluste
-        let mu_a = self
-            .fuellquerschnitt
-            .durchflussverslust_ueberfall(pot_hoehe, unterehoehe, zeit);
-        let mu_s =
-            self.fuellquerschnitt
-                .durchflussverslust_unterstroemung(pot_hoehe, unterehoehe, zeit);
+        let mu_a = self.fuellquerschnitt.durchflussverslust_ueberfall(
+            schleuse,
+            pot_hoehe,
+            unterehoehe,
+            zeit,
+        );
+        let mu_s = self.fuellquerschnitt.durchflussverslust_unterstroemung(
+            schleuse,
+            pot_hoehe,
+            unterehoehe,
+            zeit,
+        );
 
         if unterehoehe < self.hoehe {
+            trace!("mu_a, mu_s, mu_as: {:?},{:?},{:?}", mu_a, mu_s, 0.0);
             mu_a * self
                 .fuellquerschnitt
                 .quadratur_durchfluss_ueberfall(pot_hoehe, 0.0, zeit)
@@ -123,7 +149,7 @@ impl Fuellquerschnittssystem {
                 * (self.fuellquerschnitt.freigegebene_hoehe(zeit) - fuellhoehe).max(0.0)
                 + (mu_s * fuellhoehe).max(0.0))
                 / self.fuellquerschnitt.freigegebene_hoehe(zeit);
-            trace!("mu_a = {:?}, mu_s = {:?}, mu_as = {:?}", mu_a, mu_s, mu_as);
+            trace!("mu_a, mu_s, mu_as: {:?},{:?},{:?}", mu_a, mu_s, mu_as);
             mu_as
                 * (self.fuellquerschnitt.quadratur_durchfluss_unterstroemung(
                     pot_hoehe,
@@ -144,6 +170,7 @@ pub struct Fuellsystem {
 
 pub struct Unterhaupt {
     pub unterwasser: f64,
+    pub unterwasserbreite: f64,
     pub unterwassersohle: f64,
 }
 pub struct Schleuse {
@@ -172,10 +199,10 @@ impl Schleusenkammer {
 }
 
 impl Fuellsystem {
-    fn durchfluss(&self, unterehoehe: f64, oberehoehe: f64, zeit: f64) -> f64 {
+    fn durchfluss(&self, schleuse: &Schleuse, unterehoehe: f64, oberehoehe: f64, zeit: f64) -> f64 {
         let mut res = 0.0;
         for i in &self.querschnitte {
-            res += i.durchfluss(oberehoehe, unterehoehe, zeit);
+            res += i.durchfluss(schleuse, oberehoehe, unterehoehe, zeit);
         }
         return res;
     }
@@ -214,9 +241,12 @@ impl Schleuse {
             let oberehoehe = self.oberhaupt.wasserspiegel();
             let durchfluss_alt = durchfluss;
             durchfluss = 0.65
-                * self
-                    .fuellsystem
-                    .durchfluss(unterehoehe, oberehoehe, zeitschritt * (i as f64));
+                * self.fuellsystem.durchfluss(
+                    &self,
+                    unterehoehe,
+                    oberehoehe,
+                    zeitschritt * (i as f64),
+                );
             let durchfluss = if durchfluss.is_nan() { 0.0 } else { durchfluss };
             volume += durchfluss * zeitschritt;
 

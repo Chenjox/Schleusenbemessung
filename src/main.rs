@@ -19,6 +19,10 @@ struct FuellRechteck {
     hoehe: f64,
 }
 
+fn dhyd(area: f64, umfang: f64) -> f64 {
+    return 4.0 * area / umfang;
+}
+
 impl Fuellquerschnitt for FuellRechteck {
     fn querschnitt(&self, zeit: f64) -> f64 {
         let temp = zeit * self.oeffnungsgeschwindigkeit;
@@ -41,22 +45,53 @@ impl Fuellquerschnitt for FuellRechteck {
         return zeit * self.oeffnungsgeschwindigkeit > self.hoehe;
     }
 
-    fn durchflussverslust_ueberfall(&self, _pot_hoehe: f64, _unterehoehe: f64, zeit: f64) -> f64 {
+    fn durchflussverslust_ueberfall(
+        &self,
+        _schleuse: &Schleuse,
+        _pot_hoehe: f64,
+        unterehoehe: f64,
+        zeit: f64,
+    ) -> f64 {
         //Äquivalente QS Breite
-        let b = self.querschnitt(zeit) / self.freigegebene_hoehe(zeit);
-        let x = self.freigegebene_hoehe(zeit) / b;
+        let b = self.querschnitt(zeit) / (self.freigegebene_hoehe(zeit) - unterehoehe);
+        let x = (self.freigegebene_hoehe(zeit) - unterehoehe) / b;
         return 0.673 + x * (-0.0511667 + x * (-0.0105 + x * (-0.047333 + x * (0.018))));
     }
 
     fn durchflussverslust_unterstroemung(
         &self,
+        schleuse: &Schleuse,
         _pot_hoehe: f64,
-        _unterehoehe: f64,
-        _zeit: f64,
+        unterehoehe: f64,
+        zeit: f64,
     ) -> f64 {
+        //Einfluss
         let z1: f64 = 0.5;
-
-        return (1.0) / ((1.0 + z1).sqrt());
+        //Verengung
+        let areafull = self.breite * self.hoehe;
+        let areafree = self.breite * self.freigegebene_hoehe(zeit);
+        let z2 = 0.5
+            * (1.0
+                - dhyd(areafull, 2.0 * (self.breite + self.hoehe))
+                    / dhyd(
+                        areafree,
+                        2.0 * (self.breite * self.freigegebene_hoehe(zeit)),
+                    ))
+            .powi(2);
+        // Ausweitung
+        let kammerwasserspiegel =
+            unterehoehe + schleuse.oberhaupt.oberwassersohle - schleuse.unterhaupt.unterwassersohle;
+        let z3 = 1.2
+            * (1.0
+                - dhyd(
+                    areafree,
+                    2.0 * (self.breite * self.freigegebene_hoehe(zeit)),
+                ) / dhyd(
+                    schleuse.kammer.breite * kammerwasserspiegel,
+                    (schleuse.kammer.breite) + 2.0 * kammerwasserspiegel,
+                ))
+            .powi(2);
+        return (1.0) / ((1.0 + z1 + z2.max(0.0) + z3.max(0.0)).sqrt());
     }
 } // I = 0.018 x^4 + -0.047333 x^3 - 0.0105 x^2 - 0.0511667 x^1 + 0.673
 
@@ -66,6 +101,7 @@ struct Schleusenwerte {
     unterwassersohle: f64,
     oberwasser: f64,
     oberwassersohle: f64,
+    kanalbreite: f64,
     kammerbreite: f64,
     kammerlaenge: f64,
 }
@@ -95,7 +131,11 @@ fn setup_logger() -> Result<(), ()> {
         .unwrap();
     let config = Config::builder()
         .appender(Appender::builder().build("logfile", Box::new(logfile)))
-        .build(Root::builder().appender("logfile").build(LevelFilter::Trace))
+        .build(
+            Root::builder()
+                .appender("logfile")
+                .build(LevelFilter::Trace),
+        )
         .unwrap();
     log4rs::init_config(config).unwrap();
 
@@ -115,19 +155,19 @@ fn main() {
     };
 
     let fuell1 = Fuellquerschnittssystem {
-        hoehe: 0.3,
+        hoehe: 0.04,
         fuellquerschnitt: Box::new(FuellRechteck {
             oeffnungsgeschwindigkeit: 0.003,
-            breite: 3.0,
+            breite: 4.0,
             hoehe: 1.250,
         }),
     };
 
     let fuell2 = Fuellquerschnittssystem {
-        hoehe: 0.3,
+        hoehe: 0.04,
         fuellquerschnitt: Box::new(FuellRechteck {
             oeffnungsgeschwindigkeit: 0.003,
-            breite: 3.0,
+            breite: 4.0,
             hoehe: 1.250,
         }),
     };
@@ -139,10 +179,12 @@ fn main() {
         },
         oberhaupt: Oberhaupt {
             oberwasser: schleuse.oberwasser,
+            oberwasserbreite: schleuse.kanalbreite,
             oberwassersohle: schleuse.oberwassersohle,
         },
         unterhaupt: Unterhaupt {
             unterwasser: schleuse.unterwasser,
+            unterwasserbreite: schleuse.kanalbreite,
             unterwassersohle: schleuse.unterwassersohle,
         },
         fuellsystem: Fuellsystem {
