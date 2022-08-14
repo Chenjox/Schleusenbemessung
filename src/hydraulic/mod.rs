@@ -99,7 +99,8 @@ pub struct Oberhaupt {
 }
 
 pub struct Fuellquerschnittssystem {
-    pub hoehe: f64, // Unterkante des Querschnitts ab Bezugshöhe
+    pub hoehe: f64,     // Unterkante des Querschnitts ab Bezugshöhe
+    pub startzeit: f64, // In Sekunden
     pub fuellquerschnitt: Box<dyn Fuellquerschnitt>,
 }
 
@@ -119,6 +120,9 @@ impl Fuellquerschnittssystem {
         unterehoehe: f64,
         zeit: f64,
     ) -> f64 {
+        if zeit < self.startzeit {
+            return 0.0;
+        }
         let pot_hoehe = oberehoehe - self.hoehe;
         let ueberstroemhoehe = (unterehoehe - self.hoehe).max(0.0);
         // Block für die Verluste
@@ -162,12 +166,67 @@ impl Fuellquerschnittssystem {
                 ))
         }
     }
+
+    fn ist_ueberstroemt(&self, unterehoehe: f64, zeit: f64) -> bool {
+        return self.hoehe < unterehoehe;
+    }
+
+    fn ist_vollstandig_ueberstroemt(&self, unterehoehe: f64, zeit: f64) -> bool {
+        return self.hoehe + self.fuellquerschnitt.freigegebene_hoehe(zeit) < unterehoehe;
+    }
+
+    fn ist_geoffnet(&self, zeit: f64) -> bool {
+        return zeit > self.startzeit;
+    }
+
+    fn ist_vollstandig_geoffnet(&self, zeit: f64) -> bool {
+        return self.fuellquerschnitt.is_fully_opened(zeit);
+    }
 }
 
 pub struct Fuellsystem {
     pub querschnitte: Vec<Box<Fuellquerschnittssystem>>,
 }
 
+impl Fuellsystem {
+    fn durchfluss(&self, schleuse: &Schleuse, unterehoehe: f64, oberehoehe: f64, zeit: f64) -> f64 {
+        let mut res = 0.0;
+        for i in &self.querschnitte {
+            res += i.durchfluss(schleuse, oberehoehe, unterehoehe, zeit);
+        }
+        return res;
+    }
+
+    pub fn anzahl_fuellsysteme(&self) -> usize {
+        self.querschnitte.len()
+    }
+    pub fn ist_ueberstroemt(&self, unterehoehe: f64, zeit: f64) -> Vec<FuellsystemStatus> {
+        let mut vec = Vec::new();
+        for i in &self.querschnitte {
+            if i.ist_vollstandig_ueberstroemt(unterehoehe, zeit) {
+                vec.push(FuellsystemStatus::VollUeberfuellt)
+            } else if i.ist_ueberstroemt(unterehoehe, zeit) {
+                vec.push(FuellsystemStatus::StartUeberfuellung)
+            } else {
+                vec.push(FuellsystemStatus::Unbekannt)
+            }
+        }
+        return vec;
+    }
+    pub fn oeffnungsstatus(&self, zeit: f64) -> Vec<FuellsystemStatus> {
+        let mut vec = Vec::new();
+        for i in &self.querschnitte {
+            if i.ist_vollstandig_geoffnet(zeit) {
+                vec.push(FuellsystemStatus::VollGeoeffnet)
+            } else if i.ist_geoffnet(zeit) {
+                vec.push(FuellsystemStatus::StartOeffnung)
+            } else {
+                vec.push(FuellsystemStatus::Unbekannt)
+            }
+        }
+        return vec;
+    }
+}
 pub struct Unterhaupt {
     pub unterwasser: f64,
     pub unterwasserbreite: f64,
@@ -198,14 +257,28 @@ impl Schleusenkammer {
     }
 }
 
-impl Fuellsystem {
-    fn durchfluss(&self, schleuse: &Schleuse, unterehoehe: f64, oberehoehe: f64, zeit: f64) -> f64 {
-        let mut res = 0.0;
-        for i in &self.querschnitte {
-            res += i.durchfluss(schleuse, oberehoehe, unterehoehe, zeit);
-        }
-        return res;
-    }
+#[derive(Debug)]
+pub struct Event {
+    pub desc: String,
+    pub status: FuellsystemStatus,
+}
+
+pub struct Simulationsschritt {
+    pub iteration: u32,
+    pub zeitschritt: f64,
+    pub kammerwasserspiegel: f64,
+    pub durchfluss: f64,
+    pub durchflusszunahme: f64,
+    pub events: Vec<Event>,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum FuellsystemStatus {
+    Unbekannt,
+    StartOeffnung,
+    VollGeoeffnet,
+    StartUeberfuellung,
+    VollUeberfuellt,
 }
 
 impl Schleuse {
@@ -217,12 +290,12 @@ impl Schleuse {
         self.kammer.grundflaeche() * (self.hubhoehe() + self.unterhaupt.wasserspiegel())
     }
 
-    pub fn fuell_schleuse(&self) -> Vec<[f64; 6]> {
+    pub fn fuell_schleuse(&self) -> Vec<Simulationsschritt> {
         let mut kammerspiegel = self.unterhaupt.wasserspiegel();
         let zeitschritt = 1.0;
         let mut i = 1;
         let mut volume = self.kammer.grundflaeche() * kammerspiegel;
-        let max_iterations = 2000;
+        let max_iterations = 20000;
 
         let mut result_vec = Vec::new();
         let mut durchfluss = 0.0;
@@ -230,6 +303,14 @@ impl Schleuse {
             "The start values for iteration in fuell_schleuse are: HKA = {:?}, volume = {:?}",
             kammerspiegel, volume
         );
+
+        let anzahl_fuellsys = self.fuellsystem.querschnitte.len();
+        let mut statusueberfuellt_fuellsys = self.fuellsystem.ist_ueberstroemt(
+            (kammerspiegel - (self.oberhaupt.oberwassersohle - self.unterhaupt.unterwassersohle))
+                .max(0.0),
+            0.0,
+        );
+        let mut statusoffen_fuellsys = self.fuellsystem.oeffnungsstatus(0.0);
 
         while kammerspiegel < self.oberhaupt.oberwasser - self.unterhaupt.unterwassersohle
             && i < max_iterations
@@ -240,32 +321,85 @@ impl Schleuse {
                 .max(0.0);
             let oberehoehe = self.oberhaupt.wasserspiegel();
             let durchfluss_alt = durchfluss;
-            durchfluss = 0.65
-                * self.fuellsystem.durchfluss(
-                    &self,
-                    unterehoehe,
-                    oberehoehe,
-                    zeitschritt * (i as f64),
-                );
+            durchfluss = self.fuellsystem.durchfluss(
+                &self,
+                unterehoehe,
+                oberehoehe,
+                zeitschritt * (i as f64),
+            );
             let durchfluss = if durchfluss.is_nan() { 0.0 } else { durchfluss };
             volume += durchfluss * zeitschritt;
 
-            let wellengeschwindigkeit = (kammerspiegel * G).sqrt();
-            let wasserspiegelneigung = (durchfluss - durchfluss_alt)
-                / (zeitschritt
-                    * self.kammer.breite
-                    * wellengeschwindigkeit
-                    * wellengeschwindigkeit)
-                * 10.0e3;
+            //Sind irgendwelche Events eingetreten?
+            let mut events = Vec::new();
 
-            result_vec.push([
-                zeitschritt * f64::from(i),
-                durchfluss,
-                kammerspiegel,
-                volume,
-                wasserspiegelneigung,
-                (durchfluss - durchfluss_alt) / zeitschritt,
-            ]);
+            {
+                // Droppen ist wichtig
+                let momentanstroem = self
+                    .fuellsystem
+                    .ist_ueberstroemt(unterehoehe, zeitschritt * (i as f64));
+
+                let momentanoeff = self.fuellsystem.oeffnungsstatus(zeitschritt * (i as f64));
+
+                for i in 0..anzahl_fuellsys {
+                    if statusoffen_fuellsys[i] != momentanoeff[i] {
+                        match &momentanoeff[i] {
+                            FuellsystemStatus::StartOeffnung => {
+                                events.push(Event {
+                                    desc: String::from("SG"),
+                                    status: FuellsystemStatus::StartOeffnung,
+                                });
+                                statusoffen_fuellsys[i] = FuellsystemStatus::StartOeffnung
+                            }
+                            FuellsystemStatus::VollGeoeffnet => {
+                                events.push(Event {
+                                    desc: String::from("VG"),
+                                    status: FuellsystemStatus::VollGeoeffnet,
+                                });
+                                statusoffen_fuellsys[i] = FuellsystemStatus::VollGeoeffnet
+                            }
+                            _ => {}
+                        };
+                    }
+                    if statusueberfuellt_fuellsys[i] != momentanstroem[i] {
+                        match &momentanstroem[i] {
+                            FuellsystemStatus::StartUeberfuellung => {
+                                events.push(Event {
+                                    desc: String::from("SU"),
+                                    status: FuellsystemStatus::StartUeberfuellung,
+                                });
+                                statusueberfuellt_fuellsys[i] =
+                                    FuellsystemStatus::StartUeberfuellung;
+                            }
+                            FuellsystemStatus::VollUeberfuellt => {
+                                events.push(Event {
+                                    desc: String::from("VU"),
+                                    status: FuellsystemStatus::VollUeberfuellt,
+                                });
+                                statusueberfuellt_fuellsys[i] = FuellsystemStatus::VollUeberfuellt;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+            //let wellengeschwindigkeit = (kammerspiegel * G).sqrt();
+            //let wasserspiegelneigung = (durchfluss - durchfluss_alt)
+            //    / (zeitschritt
+            //        * self.kammer.breite
+            //        * wellengeschwindigkeit
+            //        * wellengeschwindigkeit)
+            //    * 10.0e3;
+
+            result_vec.push(Simulationsschritt {
+                iteration: i,
+                zeitschritt: zeitschritt * f64::from(i),
+                kammerwasserspiegel: kammerspiegel,
+                durchfluss: durchfluss,
+                durchflusszunahme: (durchfluss - durchfluss_alt) / zeitschritt,
+                events: events,
+            });
 
             i += 1;
         }

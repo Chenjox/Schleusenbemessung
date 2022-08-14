@@ -62,6 +62,8 @@ fn setup_logger() -> Result<(), ()> {
     return Ok(());
 }
 
+struct K(f64, String);
+
 fn main() {
     match setup_logger() {
         Ok(_) => {}
@@ -76,8 +78,9 @@ fn main() {
 
     let fuell1 = Fuellquerschnittssystem {
         hoehe: 0.04,
+        startzeit: 0.0,
         fuellquerschnitt: Box::new(FuellRechteck {
-            oeffnungsgeschwindigkeit: 0.0005,
+            oeffnungsgeschwindigkeit: 0.0015,
             breite: 2.0,
             hoehe: 1.250,
         }),
@@ -85,8 +88,9 @@ fn main() {
 
     let fuell2 = Fuellquerschnittssystem {
         hoehe: 0.04,
+        startzeit: 0.0,
         fuellquerschnitt: Box::new(FuellRechteck {
-            oeffnungsgeschwindigkeit: 0.0005,
+            oeffnungsgeschwindigkeit: 0.0015,
             breite: 2.0,
             hoehe: 1.250,
         }),
@@ -94,8 +98,9 @@ fn main() {
 
     let fuell3 = Fuellquerschnittssystem {
         hoehe: 0.04,
+        startzeit: 0.0,
         fuellquerschnitt: Box::new(FuellRechteck {
-            oeffnungsgeschwindigkeit: 0.0005,
+            oeffnungsgeschwindigkeit: 0.0015,
             breite: 2.0,
             hoehe: 1.250,
         }),
@@ -103,8 +108,9 @@ fn main() {
 
     let fuell4 = Fuellquerschnittssystem {
         hoehe: 0.04,
+        startzeit: 0.0,
         fuellquerschnitt: Box::new(FuellRechteck {
-            oeffnungsgeschwindigkeit: 0.0005,
+            oeffnungsgeschwindigkeit: 0.0015,
             breite: 2.0,
             hoehe: 1.250,
         }),
@@ -136,12 +142,44 @@ fn main() {
     };
     info!("Running Simulation");
     let v = schleuse.fuell_schleuse();
+    let mut events = Vec::new();
+    for k in &v {
+        if !k.events.is_empty() {
+            for event in &k.events {
+                events.push(K(k.zeitschritt, String::from(&event.desc)));
+                //println!("{:?},{:?}", k.zeitschritt, event);
+            }
+        }
+    }
     let v = v
         .iter()
-        .map(|i| i.map(|e| e.to_string()).join(","))
+        .map(|i| {
+            format!(
+                "{},{},{},{},{}",
+                i.iteration,
+                i.zeitschritt,
+                i.kammerwasserspiegel,
+                i.durchfluss,
+                i.durchflusszunahme
+            )
+        })
+        .collect::<Vec<String>>()
+        .join("\n");
+    let events = events
+        .iter()
+        .map(|i| format!("{},{}", i.0, i.1))
         .collect::<Vec<String>>()
         .join("\n");
 
+    let path = Path::new("events.csv");
+    let mut file = match File::create(&path) {
+        Err(why) => panic!("Couldn't create result.csv: {}", why),
+        Ok(file) => file,
+    };
+    match file.write_all(events.as_bytes()) {
+        Err(why) => panic!("couldn't write to result.csv: {}", why),
+        Ok(_) => println!("successfully wrote to result.csv"),
+    }
     let path = Path::new("result.csv");
     let mut file = match File::create(&path) {
         Err(why) => panic!("Couldn't create result.csv: {}", why),

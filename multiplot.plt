@@ -1,7 +1,7 @@
 set datafile separator ','
 set multiplot
 
-stats 'result.csv' using 1:2 nooutput
+stats 'result.csv' using 2:4 nooutput
 
 q = STATS_max_y
 qpos = STATS_index_max_y
@@ -9,8 +9,9 @@ qpos = STATS_index_max_y
 stats 'result.csv' using 1:3 nooutput
 
 k = STATS_max_y
+maxt = STATS_max_x
 
-set xrange[0:*]
+set xrange[0:maxt]
 
 set lmargin screen 0.3
 
@@ -20,14 +21,14 @@ set ytics 1.0
 set yrange [0:k]
 set ylabel 'Kammerwasserspiegel in [m]'
 
-plot 'result.csv' using 1:3 with lines linecolor 1 notitle
+plot 'result.csv' using 2:3 with lines linecolor 1 notitle
 
 ####
 
 set yrange [0:q+5]
 set ytics offset -8, 0
 set ylabel 'Durchfluss in [m^3/s]' offset -8, 0
-plot 'result.csv' using 1:2 with lines linecolor 2 notitle
+plot 'result.csv' using 2:4 with lines linecolor 2 notitle
 
 set arrow from qpos, graph(0,0) to qpos, graph(1,1) nohead
 
@@ -35,14 +36,23 @@ set arrow from qpos, graph(0,0) to qpos, graph(1,1) nohead
 
 stats 'result.csv' using 5 nooutput
 
-s = STATS_max
+so = STATS_max
+su = STATS_min
 
-set yrange [0:s+0.1*s]
+set yrange [-0.2:0.2]
 set ytics 0.01 offset -16, 0
-set ylabel 'Wasserspiegelneigung in [mm/m]' offset -16, 0
+set ylabel 'Durchflussänderung in [m^3/s^2]' offset -16, 0
 plot 'result.csv' using 1:5 with lines linecolor 3 notitle
 
 #plot 'result.csv' using 1:2 with lines axes x1y1 title 'Durchfluss in [m^3/s]', \
 #     'result.csv' using 1:3 with lines axes x1y2 title 'Kammerwasserspiegel in [m]'
+
+
+unset xtics
+
+set yrange [0:q+5]
+unset ytics
+unset ylabel
+plot 'events.csv' using 1:($1*0.0+q) with impulses linecolor 4 notitle
 
 pause -1
