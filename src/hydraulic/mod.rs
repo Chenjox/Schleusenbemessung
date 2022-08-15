@@ -120,7 +120,7 @@ impl Fuellquerschnittssystem {
         unterehoehe: f64,
         zeit: f64,
     ) -> f64 {
-        if zeit < self.startzeit {
+        if zeit <= self.startzeit {
             return 0.0;
         }
         let pot_hoehe = oberehoehe - self.hoehe;
@@ -130,24 +130,26 @@ impl Fuellquerschnittssystem {
             schleuse,
             pot_hoehe,
             unterehoehe,
-            zeit,
+            zeit - self.startzeit,
         );
         let mu_s = self.fuellquerschnitt.durchflussverslust_unterstroemung(
             schleuse,
             pot_hoehe,
             unterehoehe,
-            zeit,
+            zeit - self.startzeit,
         );
 
         if unterehoehe < self.hoehe {
             trace!("mu_a, mu_s, mu_as: {:?},{:?},{:?}", mu_a, mu_s, 0.0);
-            mu_a * self
-                .fuellquerschnitt
-                .quadratur_durchfluss_ueberfall(pot_hoehe, 0.0, zeit)
+            mu_a * self.fuellquerschnitt.quadratur_durchfluss_ueberfall(
+                pot_hoehe,
+                0.0,
+                zeit - self.startzeit,
+            )
         } else {
             let fuellhoehe = self
                 .fuellquerschnitt
-                .freigegebene_hoehe(zeit)
+                .freigegebene_hoehe(zeit - self.startzeit)
                 .min(ueberstroemhoehe);
             let mu_as = (mu_a
                 * (self.fuellquerschnitt.freigegebene_hoehe(zeit) - fuellhoehe).max(0.0)
@@ -158,11 +160,11 @@ impl Fuellquerschnittssystem {
                 * (self.fuellquerschnitt.quadratur_durchfluss_unterstroemung(
                     pot_hoehe,
                     ueberstroemhoehe,
-                    zeit,
+                    zeit - self.startzeit,
                 ) + self.fuellquerschnitt.quadratur_durchfluss_ueberfall(
                     pot_hoehe,
                     ueberstroemhoehe,
-                    zeit,
+                    zeit - self.startzeit,
                 ))
         }
     }
@@ -172,7 +174,11 @@ impl Fuellquerschnittssystem {
     }
 
     fn ist_vollstandig_ueberstroemt(&self, unterehoehe: f64, zeit: f64) -> bool {
-        return self.hoehe + self.fuellquerschnitt.freigegebene_hoehe(zeit) < unterehoehe;
+        return self.hoehe
+            + self
+                .fuellquerschnitt
+                .freigegebene_hoehe(zeit - self.startzeit)
+            < unterehoehe;
     }
 
     fn ist_geoffnet(&self, zeit: f64) -> bool {
@@ -180,7 +186,7 @@ impl Fuellquerschnittssystem {
     }
 
     fn ist_vollstandig_geoffnet(&self, zeit: f64) -> bool {
-        return self.fuellquerschnitt.is_fully_opened(zeit);
+        return self.fuellquerschnitt.is_fully_opened(zeit - self.startzeit);
     }
 }
 

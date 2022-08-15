@@ -54,6 +54,16 @@ unset ytics
 unset ylabel
 unset border
 set yrange [0:q+5]
-plot 'events.csv' using 1:($1*0.0+q+5) with impulses linecolor 4 notitle
+
+filtervalues(filtercol,str,col) = (stringcolumn(filtercol) eq str) ? column(col) : NaN
+
+plot 'events.csv' using (filtervalues(2,"SG",1)):(q+5) with impulses linecolor "orange" notitle
+
+plot 'events.csv' using (filtervalues(2,"VG",1)):(q+5) with impulses linecolor "brown" notitle
+
+plot 'events.csv' using (filtervalues(2,"SU",1)):(q+5) with impulses linecolor "blue" notitle
+
+plot 'events.csv' using (filtervalues(2,"VU",1)):(q+5) with impulses linecolor "navy" notitle
+
 
 pause -1
