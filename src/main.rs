@@ -291,6 +291,142 @@ fn simuliere_schleuse(schl: &Schleuse) {
     }
 }
 
+fn minimiere_hoehe_und_geschwi(
+    schleuse: Schleusenwerte,
+    vgesch: (f64, f64),
+    vbreite: (f64, f64),
+    vhoehe: (f64, f64),
+) {
+    let mut results: Vec<[f64; 3]> = Vec::new();
+    for v in (0..100).step_by(10) {
+        let geschwi = vgesch.0 + (vgesch.1 - vgesch.0) * v as f64 / 100.0;
+
+        for i in (0..100).step_by(2) {
+            let breite = vbreite.0 + (vbreite.1 - vbreite.0) * i as f64 / 100.0;
+            let max_iterations = 100;
+
+            let mut j = 0;
+            let min_hoehe = loop {
+                let hoehe = vhoehe.0 + (vhoehe.1 - vhoehe.0) * j as f64 / 100.0;
+                let shl = erschaffe_schleuse(&schleuse, hoehe, breite, geschwi);
+                let res = shl.fuell_schleuse();
+                let wasserspiegel = auswertung_wasserspiegelneigung(&shl, &res);
+                let time = res.last().unwrap().zeitschritt;
+                if (time < 60.0 * 21.0 && wasserspiegel < 0.35) {
+                    break hoehe;
+                }
+
+                if j > max_iterations {
+                    break f64::NAN;
+                }
+                j += 1;
+            };
+            results.push([breite, min_hoehe, geschwi]);
+        }
+    }
+
+    let r = results
+        .iter()
+        .map(|f| format!("{},{},{}", f[0], f[1], f[2]))
+        .collect::<Vec<String>>()
+        .join("\n");
+    let nam = format!("min.csv");
+    let path = Path::new(&nam);
+    let mut file = match File::create(&path) {
+        Err(why) => {
+            error!("Couldn't create {}: {}", nam, why);
+            return;
+        }
+        Ok(file) => file,
+    };
+    match file.write_all(r.as_bytes()) {
+        Err(why) => error!("couldn't write to {}: {}", nam, why),
+        Ok(_) => info!("successfully wrote to {}", nam),
+    }
+}
+
+fn interaktions_diagramm(
+    schleuse: Schleusenwerte,
+    vgesch: (f64, f64),
+    vbreite: (f64, f64),
+    vhoehe: (f64, f64),
+) {
+    let mut results_max: Vec<[f64; 4]> = Vec::new();
+    let mut results_min: Vec<[f64; 4]> = Vec::new();
+    for i in (0..100).step_by(2) {
+        let breite = vbreite.0 + (vbreite.1 - vbreite.0) * i as f64 / 100.0;
+
+        for j in (0..100).step_by(2) {
+            let hoehe = vhoehe.0 + (vhoehe.1 - vhoehe.0) * j as f64 / 100.0;
+            let max_iterations = 100;
+            let mut v = 0;
+            let mut reason = 0.0;
+            let min_geschwi = loop {
+                let geschwi = vgesch.0 + (vgesch.1 - vgesch.0) * (v) as f64 / max_iterations as f64;
+                let shl = erschaffe_schleuse(&schleuse, hoehe, breite, geschwi);
+                let res = shl.fuell_schleuse();
+                let wasserspiegel = auswertung_wasserspiegelneigung(&shl, &res);
+                let time = res.last().unwrap().zeitschritt;
+                if time < 60.0 * 21.0 && wasserspiegel < 0.35 {
+                    break geschwi;
+                }
+                if v > max_iterations {
+                    let tcoeff = time / 60.0 * 21.0;
+                    let wcoeff = wasserspiegel / 0.35;
+                    reason = if tcoeff > wcoeff { 1.0 } else { 2.0 };
+
+                    break f64::NAN;
+                }
+                v += 1
+            };
+            results_min.push([breite, hoehe, min_geschwi, reason]);
+            v = 0;
+            let max_geschwi = loop {
+                let geschwi = vgesch.0
+                    + (vgesch.1 - vgesch.0) * (max_iterations - v) as f64 / max_iterations as f64;
+                let shl = erschaffe_schleuse(&schleuse, hoehe, breite, geschwi);
+                let res = shl.fuell_schleuse();
+                let wasserspiegel = auswertung_wasserspiegelneigung(&shl, &res);
+                let time = res.last().unwrap().zeitschritt;
+                if time < 60.0 * 21.0 && wasserspiegel < 0.35 {
+                    break geschwi;
+                }
+                if v > max_iterations {
+                    let tcoeff = time / 60.0 * 21.0;
+                    let wcoeff = wasserspiegel / 0.35;
+                    reason = if tcoeff > wcoeff { 1.0 } else { 2.0 };
+
+                    break f64::NAN;
+                }
+                v += 1
+            };
+            results_max.push([breite, hoehe, max_geschwi, reason]);
+        }
+    }
+    write_string_to_file("inter_min.csv", results_min);
+    write_string_to_file("inter_max.csv", results_max);
+}
+
+fn write_string_to_file(nam: &str, l: Vec<[f64; 4]>) {
+    let r = l
+        .iter()
+        .map(|f| format!("{},{},{},{}", f[0], f[1], f[2], f[3]))
+        .collect::<Vec<String>>()
+        .join("\n");
+    let path = Path::new(&nam);
+    let mut file = match File::create(&path) {
+        Err(why) => {
+            error!("Couldn't create {}: {}", nam, why);
+            return;
+        }
+        Ok(file) => file,
+    };
+    match file.write_all(r.as_bytes()) {
+        Err(why) => error!("couldn't write to {}: {}", nam, why),
+        Ok(_) => info!("successfully wrote to {}", nam),
+    }
+}
+
 struct K(f64, String);
 
 fn main() {
@@ -306,10 +442,11 @@ fn main() {
     };
     // Variieren der einzelnen Werte
 
-    let var_geschwindigkeit = (0.0005, 0.005);
+    let var_geschwindigkeit = (0.0005, 0.008);
     let var_hoehe = (0.3, 0.6);
     let var_breite = (1.0, 2.3);
-    ausprobieren(schleuse, var_geschwindigkeit, var_hoehe, var_breite)
+    interaktions_diagramm(schleuse, var_geschwindigkeit, var_breite, var_hoehe)
+    //ausprobieren(schleuse, var_geschwindigkeit, var_hoehe, var_breite)
 
     //let v = erschaffe_schleuse(&schleuse, 1.2, 1.0, 0.001);
     //simuliere_schleuse(&v)
