@@ -350,6 +350,8 @@ fn interaktions_diagramm(
     vgesch: (f64, f64),
     vbreite: (f64, f64),
     vhoehe: (f64, f64),
+    hoechstneigung: f64, // in mm/m
+    max_zeit: f64 // in sekunden
 ) {
     let mut results_max: Vec<[f64; 4]> = Vec::new();
     let mut results_min: Vec<[f64; 4]> = Vec::new();
@@ -367,12 +369,12 @@ fn interaktions_diagramm(
                 let res = shl.fuell_schleuse();
                 let wasserspiegel = auswertung_wasserspiegelneigung(&shl, &res);
                 let time = res.last().unwrap().zeitschritt;
-                if time < 60.0 * 21.0 && wasserspiegel < 0.35 {
+                if time < max_zeit && wasserspiegel < hoechstneigung {
                     break geschwi;
                 }
                 if v > max_iterations {
-                    let tcoeff = time / 60.0 * 21.0;
-                    let wcoeff = wasserspiegel / 0.35;
+                    let tcoeff = time / max_zeit;
+                    let wcoeff = wasserspiegel / hoechstneigung;
                     reason = if tcoeff > wcoeff { 1.0 } else { 2.0 };
 
                     break f64::NAN;
@@ -388,12 +390,12 @@ fn interaktions_diagramm(
                 let res = shl.fuell_schleuse();
                 let wasserspiegel = auswertung_wasserspiegelneigung(&shl, &res);
                 let time = res.last().unwrap().zeitschritt;
-                if time < 60.0 * 21.0 && wasserspiegel < 0.35 {
+                if time < max_zeit && wasserspiegel < hoechstneigung {
                     break geschwi;
                 }
                 if v > max_iterations {
-                    let tcoeff = time / 60.0 * 21.0;
-                    let wcoeff = wasserspiegel / 0.35;
+                    let tcoeff = time / max_zeit;
+                    let wcoeff = wasserspiegel / hoechstneigung;
                     reason = if tcoeff > wcoeff { 1.0 } else { 2.0 };
 
                     break f64::NAN;
@@ -442,13 +444,13 @@ fn main() {
     };
     // Variieren der einzelnen Werte
 
-    let var_geschwindigkeit = (0.0005, 0.008);
-    let var_hoehe = (0.3, 0.6);
-    let var_breite = (1.0, 2.3);
-    interaktions_diagramm(schleuse, var_geschwindigkeit, var_breite, var_hoehe)
+    //let var_geschwindigkeit = (0.0005, 0.01);
+    //let var_hoehe = (0.25, 0.35);
+    //let var_breite = (2.0, 2.5);
+    //interaktions_diagramm(schleuse, var_geschwindigkeit, var_breite, var_hoehe, 0.4, 20.0*60.0)
     //ausprobieren(schleuse, var_geschwindigkeit, var_hoehe, var_breite)
-
-    //let v = erschaffe_schleuse(&schleuse, 1.2, 1.0, 0.001);
-    //simuliere_schleuse(&v)
+    // hoehe, breite ,geschwindigkeit
+    let v = erschaffe_schleuse(&schleuse, 0.35, 2.15, 0.0035);
+    simuliere_schleuse(&v)
     //println!("{}", v)
 }

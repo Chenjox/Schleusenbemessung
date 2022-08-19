@@ -20,6 +20,14 @@ impl Fuellquerschnitt for FuellRechteck {
         };
     }
 
+    fn querschnitt_prozent_zeit(&self, zeit: f64) -> f64 {
+        return self.freigegebene_hoehe(zeit) / self.hoehe;
+    }
+
+    fn querschnitt_prozent_hoehe(&self, hoehe: f64) -> f64{
+        return (hoehe).min(self.hoehe) / self.hoehe;
+    }
+
     fn freigegebene_hoehe(&self, zeit: f64) -> f64 {
         return (zeit * self.oeffnungsgeschwindigkeit).min(self.hoehe);
     }
@@ -43,6 +51,10 @@ impl Fuellquerschnitt for FuellRechteck {
         let b = self.querschnitt(zeit) / (self.freigegebene_hoehe(zeit) - unterehoehe);
         let x = (self.freigegebene_hoehe(zeit) - unterehoehe) / b;
         return 0.673 + x * (-0.0511667 + x * (-0.0105 + x * (-0.047333 + x * (0.018))));
+    }
+
+    fn durchflussverslust_schuetz(&self, pot_hoehe: f64, unterehoehe: f64, zeit: f64) -> f64 {
+        return 0.0;
     }
 
     fn durchflussverslust_unterstroemung(

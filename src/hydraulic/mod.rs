@@ -6,6 +6,12 @@ pub trait Fuellquerschnitt {
     // Fläche des geöffneten Querschnitts zu einem Zeitpunkt s
     fn querschnitt(&self, zeit: f64) -> f64;
 
+    // Prozentualer Wert der geöffneten Querschnittsfläche
+    fn querschnitt_prozent_zeit(&self, zeit: f64) -> f64;
+
+    // Prozentualer Wert der geöffneten Querschnittsfläche abhängig von der Höhe
+    fn querschnitt_prozent_hoehe(&self, hoehe: f64) -> f64;
+
     // Freigegebene Hohe des Querschnitts
     fn freigegebene_hoehe(&self, zeit: f64) -> f64;
 
@@ -31,6 +37,12 @@ pub trait Fuellquerschnitt {
         pot_hoehe: f64,
         unterehoehe: f64,
         zeit: f64,
+    ) -> f64;
+    fn durchflussverslust_schuetz(
+        &self,
+        pot_hoehe: f64,
+        unterehoehe: f64,
+        zeit: f64
     ) -> f64;
 
     // Quadratur zur Ermittlung des Durchflusses
@@ -84,6 +96,16 @@ pub trait Fuellquerschnitt {
                 * (2.0 * G * (pot_hoehe - (uberstroemte_hoehe + schritt * i as f64))).sqrt();
         }
         return (rest + unteregrenze + oberegrenze) * schritt;
+    }
+
+    fn quadratur_durchfluss_schuetz(
+        &self,
+        pot_hoehe: f64,
+        untere_hoehe: f64,
+        zeit: f64
+    ) -> f64 {
+        let frei = self.freigegebene_hoehe(zeit);
+        return 0.0;
     }
 }
 
@@ -151,10 +173,10 @@ impl Fuellquerschnittssystem {
                 .fuellquerschnitt
                 .freigegebene_hoehe(zeit - self.startzeit)
                 .min(ueberstroemhoehe);
-            let mu_as = (mu_a
-                * (self.fuellquerschnitt.freigegebene_hoehe(zeit) - fuellhoehe).max(0.0)
-                + (mu_s * fuellhoehe).max(0.0))
-                / self.fuellquerschnitt.freigegebene_hoehe(zeit);
+            let mu_as = mu_a
+                * (1.0 - self.fuellquerschnitt.querschnitt_prozent_hoehe(fuellhoehe))
+                + (mu_s * self.fuellquerschnitt.querschnitt_prozent_hoehe(fuellhoehe));
+
             trace!("mu_a, mu_s, mu_as: {:?},{:?},{:?}", mu_a, mu_s, mu_as);
             mu_as
                 * (self.fuellquerschnitt.quadratur_durchfluss_unterstroemung(

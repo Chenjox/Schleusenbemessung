@@ -7,8 +7,8 @@ set palette defined (0 "blue", 1 "red")
 
 set grid xtics ytics
 
-set xrange[1.0:2.3]
-set yrange[0.3:0.6]
+set xrange[2.0:2.5]
+set yrange[0.25:0.35]
 set cbrange[0.0005:0.005]
 
 set ytics 0.02
