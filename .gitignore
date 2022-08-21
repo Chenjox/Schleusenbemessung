@@ -5,3 +5,12 @@ __**
 log4rs.yml
 dimen***.csv
 events.csv
+inter_min.csv
+inter_max.csv
+inter.csv
+result0.csv
+min.csv
+*.aux
+*.pdf
+*.synctex.gz
+*.eps
