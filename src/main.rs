@@ -4,6 +4,7 @@ mod hydraulic;
 use serde::Deserialize;
 use std::fs::File;
 use std::io::prelude::*;
+use std::ops::Range;
 use std::path::Path;
 
 use log::LevelFilter;
@@ -65,7 +66,7 @@ fn erschaffe_schleuse(
     fuellzeit: f64,
 ) -> Schleuse {
     let fuell1 = Fuellquerschnittssystem {
-        hoehe: 0.04,
+        hoehe: 0.00,
         startzeit: 0.0,
         fuellquerschnitt: Box::new(FuellRechteck {
             oeffnungsgeschwindigkeit: fuellzeit,
@@ -75,7 +76,7 @@ fn erschaffe_schleuse(
     };
 
     let fuell2 = Fuellquerschnittssystem {
-        hoehe: 0.04,
+        hoehe: 0.00,
         startzeit: 0.0,
         fuellquerschnitt: Box::new(FuellRechteck {
             oeffnungsgeschwindigkeit: fuellzeit,
@@ -85,7 +86,7 @@ fn erschaffe_schleuse(
     };
 
     let fuell3 = Fuellquerschnittssystem {
-        hoehe: 0.04,
+        hoehe: 0.00,
         startzeit: 0.0,
         fuellquerschnitt: Box::new(FuellRechteck {
             oeffnungsgeschwindigkeit: fuellzeit,
@@ -95,7 +96,7 @@ fn erschaffe_schleuse(
     };
 
     let fuell4 = Fuellquerschnittssystem {
-        hoehe: 0.04,
+        hoehe: 0.00,
         startzeit: 0.0,
         fuellquerschnitt: Box::new(FuellRechteck {
             oeffnungsgeschwindigkeit: fuellzeit,
@@ -351,7 +352,7 @@ fn interaktions_diagramm(
     vbreite: (f64, f64),
     vhoehe: (f64, f64),
     hoechstneigung: f64, // in mm/m
-    max_zeit: f64 // in sekunden
+    max_zeit: f64,       // in sekunden
 ) {
     let mut results_max: Vec<[f64; 4]> = Vec::new();
     let mut results_min: Vec<[f64; 4]> = Vec::new();
@@ -409,6 +410,68 @@ fn interaktions_diagramm(
     write_string_to_file("inter_max.csv", results_max);
 }
 
+fn minimiere_geschwi(
+    schleuse: Schleusenwerte,
+    vgesch: (f64, f64),
+    breite: f64,
+    hoehe: f64,
+    grenze_zeit: f64,
+    grenze_anderung: (f64, f64),
+    grenze_durchfluss: (f64, f64),
+    anzahl_schritte: u32,
+) {
+    let mut v_momentan = vgesch.1;
+    let mut v_last = 0.0;
+    let schrittweite = 1.0 / anzahl_schritte as f64;
+    for i in 0..anzahl_schritte {
+        // Hilfswerte als Double
+
+        let momentan_schritt = schrittweite * i as f64;
+        // Geschwindigkeitsauswahl, hierbei wird von der oberen Grenze ausgegangen
+
+        v_momentan = interpolate(vgesch, 1.0 - momentan_schritt);
+        info!("v_m = {}", v_momentan);
+        let schleus = erschaffe_schleuse(&schleuse, hoehe, breite, v_momentan);
+        // Simulieren der Schleuse
+        let res = schleus.fuell_schleuse();
+        // Überprüfen der Zeit
+        if res.last().unwrap().zeitschritt > grenze_zeit {
+            continue; // Gehe zur nächsten Geschwindigkeitsstufe
+        }
+        // Überprüfen der Randbedingungen
+        let mut is_accepted = true;
+
+        for r in res {
+            if !is_contained(grenze_durchfluss, r.durchfluss) {
+                info!("Schleuse abgelehnt aufgrund unzulässigen Durchflusses");
+                is_accepted = false;
+            }
+            if !is_contained(grenze_anderung, r.durchflusszunahme) {
+                info!("Schleuse abgelehnt aufgrund unzulässiger Durchflusseszunahme");
+                is_accepted = false;
+            }
+        }
+        if is_accepted {
+            if v_momentan > v_last {
+                v_last = v_momentan;
+                continue;
+            } else {
+                break;
+            }
+        }
+    }
+    let final_schleus = erschaffe_schleuse(&schleuse, hoehe, breite, v_momentan);
+    println!("v_max = {} m/s", v_momentan);
+    simuliere_schleuse(&final_schleus)
+}
+
+fn interpolate(bet: (f64, f64), t: f64) -> f64 {
+    bet.0 + (bet.1 - bet.0) * t
+}
+fn is_contained(bet: (f64, f64), val: f64) -> bool {
+    return val >= bet.0 && val <= bet.1;
+}
+
 fn write_string_to_file(nam: &str, l: Vec<[f64; 4]>) {
     let r = l
         .iter()
@@ -444,13 +507,22 @@ fn main() {
     };
     // Variieren der einzelnen Werte
 
-    //let var_geschwindigkeit = (0.0005, 0.01);
+    let var_geschwindigkeit = (0.0005, 0.0037);
     //let var_hoehe = (0.25, 0.35);
     //let var_breite = (2.0, 2.5);
     //interaktions_diagramm(schleuse, var_geschwindigkeit, var_breite, var_hoehe, 0.4, 20.0*60.0)
     //ausprobieren(schleuse, var_geschwindigkeit, var_hoehe, var_breite)
     // hoehe, breite ,geschwindigkeit
-    let v = erschaffe_schleuse(&schleuse, 0.35, 2.15, 0.0035);
-    simuliere_schleuse(&v)
+    minimiere_geschwi(
+        schleuse,
+        var_geschwindigkeit,
+        2.3,
+        0.35,
+        1260.0,
+        (-0.7299, 0.1962),
+        (-1.0, 58.26),
+        1000,
+    )
+
     //println!("{}", v)
 }

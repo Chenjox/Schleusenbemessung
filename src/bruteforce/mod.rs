@@ -24,7 +24,7 @@ impl Fuellquerschnitt for FuellRechteck {
         return self.freigegebene_hoehe(zeit) / self.hoehe;
     }
 
-    fn querschnitt_prozent_hoehe(&self, hoehe: f64) -> f64{
+    fn querschnitt_prozent_hoehe(&self, hoehe: f64) -> f64 {
         return (hoehe).min(self.hoehe) / self.hoehe;
     }
 
@@ -64,32 +64,30 @@ impl Fuellquerschnitt for FuellRechteck {
         unterehoehe: f64,
         zeit: f64,
     ) -> f64 {
-        //Einfluss
-        let z1: f64 = 0.5;
-        //Verengung
+        //Einlauf
         let areafull = self.breite * self.hoehe;
         let areafree = self.breite * self.freigegebene_hoehe(zeit);
-        let z2 = 0.5
+
+        let z1: f64 = 0.5;
+        // Ausweitung
+        let z2: f64 = 1.2
             * (1.0
-                - dhyd(areafull, 2.0 * (self.breite + self.hoehe))
-                    / dhyd(
-                        areafree,
-                        2.0 * (self.breite * self.freigegebene_hoehe(zeit)),
-                    ))
+                - dhyd(
+                    areafree,
+                    2.0 * (self.breite + self.freigegebene_hoehe(zeit)),
+                ) / dhyd(areafull, 2.0 * (self.breite + self.hoehe)))
             .powi(2);
         // Ausweitung
         let kammerwasserspiegel =
             unterehoehe + schleuse.oberhaupt.oberwassersohle - schleuse.unterhaupt.unterwassersohle;
         let z3 = 1.2
             * (1.0
-                - dhyd(
-                    areafree,
-                    2.0 * (self.breite * self.freigegebene_hoehe(zeit)),
-                ) / dhyd(
-                    schleuse.kammer.breite * kammerwasserspiegel,
-                    (schleuse.kammer.breite) + 2.0 * kammerwasserspiegel,
-                ))
+                - dhyd(areafree, 2.0 * (self.breite * self.hoehe))
+                    / dhyd(
+                        schleuse.kammer.breite * kammerwasserspiegel,
+                        (schleuse.kammer.breite) + 2.0 * kammerwasserspiegel,
+                    ))
             .powi(2);
-        return (1.0) / ((1.0 + z1 + z2.max(0.0) + z3.max(0.0)).sqrt());
+        return (1.0) / ((1.0 + z1.max(0.0) + z2.max(0.0) + z3.max(0.0)).sqrt());
     }
 } // I = 0.018 x^4 + -0.047333 x^3 - 0.0105 x^2 - 0.0511667 x^1 + 0.673

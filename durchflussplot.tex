@@ -1,0 +1,67 @@
+\documentclass{standalone}
+
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage{opensans}
+\pgfplotsset{compat=1.8}
+
+\sisetup{output-decimal-marker = {,},
+		inter-unit-product =\cdot,
+		exponent-product =\cdot,
+        per-mode = symbol
+}
+
+\begin{document}
+\begin{tikzpicture}
+  \pgfplotsset{set layers}
+  \begin{axis}[
+    scale only axis,
+    axis y line*=left,
+    ymin=0,
+    ymax=11.5,
+    xmin=0,
+    xmax=18.65,
+    grid=both,
+    xlabel={Zeit in $\si{\minute}$},
+    ylabel={Kammerwasserspiegel in $\si{\meter}$},
+    xtick distance=2,
+    ytick distance=1]
+    \addplot table [
+      solid,
+      olive,
+      mark=,
+      col sep=comma,
+      %x index=1,
+      x expr={\thisrowno{1}/60.0},
+      y index=2] {result.csv};
+  \end{axis}
+  \begin{axis}[
+    scale only axis,
+    axis y line*=right,
+    ymin=0,
+    ymax=23,
+    xmin=0,
+    xmax=18.65,
+    axis x line = none,
+    grid=both,
+    %xlabel={Zeit in $\si{\minute}$},
+    ylabel={Durchfluss in $\si{\meter\cubed\per\second}$},
+    %xtick distance=2,
+    ytick distance=2]
+    \addplot[
+      red
+    ] table [
+      solid,
+      mark=,
+      col sep=comma,
+      %x index=1,
+      x expr={\thisrowno{1}/60.0},
+      y index=3] {result.csv};
+    \addplot+[ycomb,mark=,olive,dashed] coordinates {
+       (98.0/60.0,23) (341.0/60.0,23) (375.0/60.0,23)
+    };
+  \end{axis}
+\end{tikzpicture}
+\end{document}
